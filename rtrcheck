@@ -1,0 +1,156 @@
+#!/usr/bin/env sh
+#
+# rtrcheck - compares RTR serial and data with previous run in CWD
+#
+# Author: Lukas Tribus <lukas@ltri.eu>
+# https://github.com/lukastribus/rtrcheck
+#
+#
+# needs jq and rtrdump (from Cloudflare's GoRTR)
+
+
+# usage function
+usage()
+{
+  echo "rtrcheck v0.1 - compares RTR serial and data with previous run in CWD
+
+Requirements:
+ - jq
+ - rtrdump (from Cloudflare's GoRTR project)
+
+Usage: rtrcheck -c HOST:PORT [ OPTIONS ]
+
+Arguments:
+ -c <HOST:PORT>  connect to <HOST:PORT> (or RTRCHK_CONNECT)
+ -r <rtr-args>   additional rtrdump arguments (or RTRCHK_RTRDUMP_OPT)
+ -w <dir>        use instead of current working dir (or RTRCHK_WRK_DIR)
+ -i              ignore RTR serial decrease (RTR server restarts)
+ -n              ignore data; RTR serial number comparison only
+ -y <MIN>        return 3 (UNKNOWN) if previous run was less then <MIN> ago
+ -v              verbose mode (still only a single output for success)
+
+Examples:
+  rtrcheck -c 127.0.0.1:323
+  RTRCHK_CONNECT=127.0.0.1:323 rtrcheck
+
+Outputs:
+ - errors to stderr
+ - stdout is silent by default, unless run with -v
+
+Return codes (nagios friendly):
+ - returns 0 : RTR serial increased and data changed (unless -n)
+ - returns 1 : RTR serial decreased (unless -i)
+ - returns 2 : RTR serial or data was the same (stale data), or rtrdump failure
+ - returns 3 : other errors
+" >&2
+  exit 3
+}
+
+while getopts 'c:r:w:iny:vh?' c
+do
+  case "$c" in
+    c) RTRCHK_CONNECT="$OPTARG" ;;
+    r) RTRCHK_RTRDUMP_OPT="$OPTARG" ;;
+    w) RTRCHK_WRK_DIR="$OPTARG" ;;
+    i) RTRCHK_IGN_DCR=1 ;;
+    n) RTRCHK_SERIALONLY=1 ;;
+    y) RTRCHK_YOUNGERTHN="$OPTARG" ;;
+    v) RTRCHK_VERBOSE=1 ;;
+    h|?) usage ;;
+  esac
+done
+
+# init vars
+[ -z "$RTRCHK_CONNECT" ] && usage
+RTRCHK_RTRDUMP_FILE="rtrdump-$(echo "$RTRCHK_CONNECT" | tr ':' '-').json"
+RTRCHK_RTRDUMP_VRP_FILE="rtrdump-vrponly-$RTRCHK_RTRDUMP_FILE"
+RTRDUMP_OPTIONS="-connect $RTRCHK_CONNECT -loglevel error $RTRCHK_RTRDUMP_OPT"
+RTRCHK_RTRDUMP_OLD_FILE="$RTRCHK_RTRDUMP_FILE.old"
+RTRCHK_RTRDUMP_VRP_OLD_FILE="$RTRCHK_RTRDUMP_VRP_FILE.old"
+
+# change directory
+if [ -n "$RTRCHK_WRK_DIR" ]; then cd "$RTRCHK_WRK_DIR" || exit 3; fi
+
+# if old file is present
+if [ -f "$RTRCHK_RTRDUMP_FILE" ]; then
+
+  # ignore if younger then RTRCHK_YOUNGERTHN
+  if [ -n "$RTRCHK_YOUNGERTHN" ] && find "$RTRCHK_RTRDUMP_FILE" -mmin -"$RTRCHK_YOUNGERTHN" | grep -q .; then
+    echo "UNKNOWN: $RTRCHK_RTRDUMP_FILE younger than $RTRCHK_YOUNGERTHN, aborting." >&2
+    exit 3
+  fi
+
+  # move
+  mv -f "$RTRCHK_RTRDUMP_FILE" "$RTRCHK_RTRDUMP_OLD_FILE" || exit 3;
+fi
+
+# run rtrdump
+# shellcheck disable=SC2086
+rtrdump $RTRDUMP_OPTIONS -file "$RTRCHK_RTRDUMP_FILE" || exit 2
+
+# handle VRP
+if [ -z "$RTRCHK_SERIALONLY" ]; then
+  # mv old file
+  if [ -f "$RTRCHK_RTRDUMP_VRP_FILE" ]; then mv -f "$RTRCHK_RTRDUMP_VRP_FILE" "$RTRCHK_RTRDUMP_VRP_OLD_FILE" || exit 3; fi
+
+  # extract data
+  jq -c '.["roas"]' "$RTRCHK_RTRDUMP_FILE" >"$RTRCHK_RTRDUMP_VRP_FILE" || exit 3
+fi
+
+# extract serials
+RTR_SERIAL=$(jq '.["metadata"]["serial"] | numbers' "$RTRCHK_RTRDUMP_FILE") || exit 3
+RTR_OLD_SERIAL=$(jq '.["metadata"]["serial"] | numbers' "$RTRCHK_RTRDUMP_OLD_FILE") || exit 3
+
+# serial missing in json, could be due to gortr #83
+# (accepted because running twice into this assumption, even if wrong, will cause "CRITICAL: RTR serial 0 stale" alert)
+if [ -z "$RTR_SERIAL" ]; then
+  [ -n "$RTRCHK_VERBOSE" ] && echo "No serial found in $RTRCHK_RTRDUMP_FILE, assuming zero."
+  RTR_SERIAL=0
+fi
+if [ -z "$RTR_OLD_SERIAL" ]; then
+  [ -n "$RTRCHK_VERBOSE" ] && echo "No serial found in $RTRCHK_RTRDUMP_OLD_FILE, assuming zero."
+  RTR_OLD_SERIAL=0
+fi
+
+# RTR serial comparison
+if [ "$RTR_OLD_SERIAL" -gt "$RTR_SERIAL" ]; then
+  if [ -n "$RTRCHK_IGN_DCR" ]; then
+    if [ -n "$RTRCHK_SERIALONLY" ]; then
+      [ -n "$RTRCHK_VERBOSE" ] && echo "SUCCESS: IGNORING RTR serial decrease from $RTR_OLD_SERIAL to $RTR_SERIAL, data also ignored."
+      exit 0
+    fi
+  else
+    echo "WARNING: RTR serial DECREASED from $RTR_OLD_SERIAL to $RTR_SERIAL!" >&2
+    exit 1
+  fi
+elif [ "$RTR_OLD_SERIAL" -eq "$RTR_SERIAL" ]; then
+  echo "CRITICAL: RTR serial $RTR_OLD_SERIAL stale!" >&2
+  exit 2
+elif [ "$RTR_OLD_SERIAL" -ne "$RTR_SERIAL" ]; then
+  if [ -n "$RTRCHK_SERIALONLY" ]; then
+    [ -n "$RTRCHK_VERBOSE" ] && echo "SUCCESS: RTR serial increased from $RTR_OLD_SERIAL to $RTR_SERIAL, data ignored."
+    exit 0
+  fi
+fi
+
+# full VRP comparison
+if [ -z "$RTRCHK_SERIALONLY" ]; then
+  cmp "$RTRCHK_RTRDUMP_VRP_FILE" "$RTRCHK_RTRDUMP_VRP_OLD_FILE" >/dev/null
+  case $? in
+    0)
+      echo "CRITICAL: RTR serial changed from $RTR_OLD_SERIAL to $RTR_SERIAL, but VRPs are stale!" >&2
+      exit 2
+      ;;
+    1)
+      [ -n "$RTRCHK_VERBOSE" ] && echo "SUCCESS: RTR serial changed from $RTR_OLD_SERIAL to $RTR_SERIAL, VRPs changed also."
+      exit 0
+      ;;
+    *)
+      exit 3
+      ;;
+  esac
+fi
+
+# we should not be here
+echo "unhandled exception" >&2
+exit 3
