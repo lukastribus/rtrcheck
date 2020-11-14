@@ -48,7 +48,7 @@ wget https://raw.githubusercontent.com/lukastribus/rtrcheck/master/rtrcheck -qO 
 * `-w <dir> / RTRCHK_WRK_DIR=<dir>` : use this directory instead of the current working directory
 * `-i / RTRCHK_IGN_DCR=1` : ignore RTR serial decrease (e.g. when a RTR servers restarts)
 * `-n / RTRCHK_SERIALONLY` : ignore data, just compare RTR serial number
-* `-y <MIN>/ RTRCHK_YOUNGERTHN` : abort if last run was less than <MIN> ago, exit 3 (UNKNOWN)
+* `-y <MIN>/ RTRCHK_YOUNGERTHN` : abort if last run was less than `<MIN>` ago, exit 3 (UNKNOWN)
 * `-v / RTRCHK_VERBOSE` : generate informational output on stdout before returning success
 
 
