@@ -9,7 +9,7 @@
 # needs jq and rtrdump (from StayRTR $RTRCHK_REQUIRED_STAYRTR_RELEASE or later)
 
 # define releases
-RTRCHK_VERSION='0.1'
+RTRCHK_VERSION='0.2'
 RTRCHK_REQUIRED_STAYRTR_RELEASE='v0.6.2'
 
 # usage function
