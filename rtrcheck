@@ -6,17 +6,20 @@
 # https://github.com/lukastribus/rtrcheck
 #
 #
-# needs jq and rtrdump (from Cloudflare's GoRTR)
+# needs jq and rtrdump (from StayRTR $RTRCHK_REQUIRED_STAYRTR_RELEASE or later)
 
+# define releases
+RTRCHK_VERSION='0.1'
+RTRCHK_REQUIRED_STAYRTR_RELEASE='v0.6.2'
 
 # usage function
 usage()
 {
-  echo "rtrcheck v0.1 - compares RTR serial and data with previous run in CWD
+  echo "rtrcheck v${RTRCHK_VERSION} - compares RTR serial and data with previous run in CWD
 
 Requirements:
  - jq
- - rtrdump (from Cloudflare's GoRTR project)
+ - rtrdump (from StayRTR ${RTRCHK_REQUIRED_STAYRTR_RELEASE} or later)
 
 Usage: rtrcheck -c HOST:PORT [ OPTIONS ]
 
@@ -101,14 +104,14 @@ fi
 RTR_SERIAL=$(jq '.["metadata"]["serial"] | numbers' "$RTRCHK_RTRDUMP_FILE") || exit 3
 RTR_OLD_SERIAL=$(jq '.["metadata"]["serial"] | numbers' "$RTRCHK_RTRDUMP_OLD_FILE") || exit 3
 
-# serial missing in json, could be due to gortr #83
+# serial missing in json, could be due to too old rtrdump
 # (accepted because running twice into this assumption, even if wrong, will cause "CRITICAL: RTR serial 0 stale" alert)
 if [ -z "$RTR_SERIAL" ]; then
-  [ -n "$RTRCHK_VERBOSE" ] && echo "No serial found in $RTRCHK_RTRDUMP_FILE, assuming zero."
+  [ -n "$RTRCHK_VERBOSE" ] && echo "No serial found in $RTRCHK_RTRDUMP_FILE, assuming zero. Make sure to use rtrdump from StayRTR ${RTRCHK_REQUIRED_STAYRTR_RELEASE} or later."
   RTR_SERIAL=0
 fi
 if [ -z "$RTR_OLD_SERIAL" ]; then
-  [ -n "$RTRCHK_VERBOSE" ] && echo "No serial found in $RTRCHK_RTRDUMP_OLD_FILE, assuming zero."
+  [ -n "$RTRCHK_VERBOSE" ] && echo "No serial found in $RTRCHK_RTRDUMP_OLD_FILE, assuming zero. Make sure to use rtrdump from StayRTR ${RTRCHK_REQUIRED_STAYRTR_RELEASE} or later."
   RTR_OLD_SERIAL=0
 fi
 

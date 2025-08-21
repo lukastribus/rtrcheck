@@ -27,7 +27,7 @@ It compares the RTR serial number and data (binary comparison of jq data output)
 
 ## Requirements
 * [jq](https://stedolan.github.io/jq/)
-* rtrdump [Cloudflare's GoRTR project](https://github.com/cloudflare/gortr) 
+* rtrdump from [StayRTR](https://github.com/bgp/stayrtr) v0.6.2 or later
 
 
 ## Installation
@@ -159,7 +159,7 @@ The RTR serial actually decreased; this is most likely caused by a RTR server re
 
 ### No serial found in FILE, assuming zero
 
-This verbose output means that a serial field was empty or non-existing, zero is therefor assumed. This is caused by [rtrdump omitting zero in JSON](https://github.com/cloudflare/gortr/issues/83).
+This verbose output means that a serial field was empty or non-existing, zero is therefore assumed. This could happen during the first run or because rtrdump is too old. Make sure you are using the rtrdump version listed in [Requirements](#requirements).
 
 ### RTR serial is all over the place (instead of steadily increasing)
 
