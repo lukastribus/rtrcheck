@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM alpine:3.20
+FROM alpine:3
 
 # Requirements: jq and rtrdump (from StayRTR v0.6.2 or later)
 # https://github.com/bgp/stayrtr/releases
