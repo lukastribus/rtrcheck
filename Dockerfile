@@ -9,7 +9,7 @@ ARG TARGETARCH
 LABEL org.opencontainers.image.title="rtrcheck" \
       org.opencontainers.image.description="Compares RTR serial and data with previous run" \
       org.opencontainers.image.source="https://github.com/lukastribus/rtrcheck" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="ISC"
 
 RUN apk add --no-cache jq ca-certificates curl
 
